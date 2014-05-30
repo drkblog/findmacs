@@ -3,6 +3,8 @@ findmacs
 
 Discover MAC address for IP range using ARP
 
+This tool will query every IP in a given range and print received MAC address to standard output. It uses ARP protocol. Devices connected to the network not using IP protocol won't get discovered.
+
 compile
 =======
 
