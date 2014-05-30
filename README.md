@@ -11,7 +11,7 @@ compile
 usage
 =====
 
-   Usage: findmacs [-apvh] [-r IP/CIDR] interface
+    Usage: findmacs [-apvh] [-r IP/CIDR] interface
     
       -r IP/CIDR      Scan this IP range. If not given <localIP>/24 is used
       -a              Accept ANY reply, even if it wasn't triggered by us
