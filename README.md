@@ -8,6 +8,8 @@ This tool will query every IP in a given range and print received MAC address to
 compile
 =======
 
+This tool compiles under Linux
+
     $ gcc findmacs.c -o findmacs
 
 usage
