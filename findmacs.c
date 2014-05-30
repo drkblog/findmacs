@@ -62,7 +62,7 @@ int main(int argc, char ** argv)
   // Read arguments
   opterr = 0;
 
-  while ((c = getopt (argc, argv, "hr:")) != -1)
+  while ((c = getopt (argc, argv, "hapvr:")) != -1)
     switch (c)
     {
       case 'h':
@@ -155,9 +155,12 @@ int main(int argc, char ** argv)
     sprintf(target, "%s/24", interface_ip);
   }
 
-  printf("IP %s\n", interface_ip);
-  printf("MAC %02x:%02x:%02x:%02x:%02x:%02x\n", interface_mac[0], interface_mac[1], interface_mac[2], interface_mac[3], interface_mac[4], interface_mac[5]);
-  printf("RANGE %s\n\n", target);
+  if (flags & VERBOSE) {
+    printf("Interface %s\n", interface_name);
+    printf("Local IP %s\n", interface_ip);
+    printf("Local MAC %02x:%02x:%02x:%02x:%02x:%02x\n", interface_mac[0], interface_mac[1], interface_mac[2], interface_mac[3], interface_mac[4], interface_mac[5]);
+    printf("Scan range %s\n\n", target);
+  }
 
   getMACs(fd, interface_index, interface_mac, interface_ip, target, flags);
 
