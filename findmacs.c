@@ -67,7 +67,7 @@ int main(int argc, char ** argv)
     {
       case 'h':
         usage();
-        abort();
+        exit(0);
         break;
       case 'a':
         flags |= ACCEPT_ANY;
@@ -325,7 +325,7 @@ uint32_t inc_netorder(uint32_t value)
 
 void usage()
 {
-  printf("Usage: findmacs [-r IP/CIDR] interface\n\n");
+  printf("Usage: findmacs [-apvh] [-r IP/CIDR] interface\n\n");
   printf("  -r IP/CIDR      Scan this IP range. If not given <localIP>/24 is used\n");
   printf("  -a              Accept ANY reply, even if it wasn't triggered by us\n");
   printf("  -p              Print IP address being queried\n");
