@@ -17,7 +17,7 @@ This tool compiles under Linux
 usage
 =====
 
-    Usage: findmacs [-apvh] [-t time] [-r IP/CIDR] [-l filename [-i]] interface
+    Usage: findmacs [-apvhV] [-t time] [-r IP/CIDR] [-l filename [-i]] interface
     
       -r IP/CIDR      Scan this IP range. If not given <localIP>/24 is used
       -l filename     Load MAC addresses listed in <filename> and use them as allowed.
@@ -35,14 +35,16 @@ Sample output
 
     $ sudo ./findmacs -vr 192.168.0.1/28 eth0
     Interface eth0
-    Local IP 192.168.0.14
-    Local MAC 94:de:81:a8:f4:15
+    Local IP 192.168.0.49
+    Local MAC 94:de:80:b8:f5:45
     Scan range 192.168.0.1/28
     
-    192.168.0.1     00:23:54:e0:c9:91 in reply to 192.168.0.14     94:de:81:a8:f4:15
-    192.168.0.4     00:19:99:87:5b:54 in reply to 192.168.0.14     94:de:81:a8:f4:15
-    192.168.0.6     00:22:15:db:ba:18 in reply to 192.168.0.14     94:de:81:a8:f4:15
-    192.168.0.7     00:22:4d:39:84:05 in reply to 192.168.0.14     94:de:81:a8:f4:15
-    192.168.0.10    00:22:15:a9:7c:2d in reply to 192.168.0.14     94:de:81:a8:f4:15
-    192.168.0.12    00:19:99:88:5e:1b in reply to 192.168.0.14     94:de:81:a8:f4:15
-    192.168.0.15    00:19:92:81:71:2e in reply to 192.168.0.14     94:de:81:a8:f4:15
+    00:22:54:e3:c9:91       192.168.0.1     ->      94:de:86:a8:f5:45       192.168.0.19
+    00:19:93:88:5b:54       192.168.0.4     ->      94:de:86:a8:f5:45       192.168.0.19
+    00:22:15:4b:b7:88       192.168.0.6     ->      94:de:86:a8:f5:45       192.168.0.19
+    00:22:4d:38:04:05       192.168.0.7     ->      94:de:86:a8:f5:45       192.168.0.19
+    00:22:13:28:2c:2d       192.168.0.10    ->      94:de:86:a8:f5:45       192.168.0.19
+    00:19:99:33:53:1b       192.168.0.12    ->      94:de:86:a8:f5:45       192.168.0.19
+    00:19:99:83:21:7e       192.168.0.15    ->      94:de:86:a8:f5:45       192.168.0.19
+
+
