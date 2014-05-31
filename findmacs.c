@@ -16,6 +16,10 @@
 *  You should have received a copy of the GNU General Public License
 *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
+#define _GNU_SOURCE 
+
+#define VERSION "findMACs v1.05"
+#define COPYRIGHT "(C) 2014 Leandro Fernández - http://www.drk.com.ar/findmacs"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -30,43 +34,70 @@
 #include <netpacket/packet.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <search.h>
+#include <linux/limits.h>
 
 // String length for IP and IP/CIDR
 #define IPSTR_ADDR_LEN 16
 #define IPCIDRSTR_ADDR_LEN 20
+#define MACSTR_ADDR_LEN 18
+#define LINE_LEN 200
+
+#define IP_ADDR_LEN 4
 
 // Configuration flags
 #define ACCEPT_ANY 0x01
 #define PRINT_REQ  0x02
 #define VERBOSE    0x04
+#define HASH       0x08
+#define HASH_DENY  0x10
 
 // Print usage information
 void usage();
 // Incremente a 32 bit integer in network byte order
 uint32_t inc_netorder(uint32_t value);
+// Convert MAC/IP in array to string
+void macarray_to_str(uint8_t array[ETHER_ADDR_LEN], char dest[MACSTR_ADDR_LEN]);
+void iparray_to_str(uint8_t array[IP_ADDR_LEN], char dest[IPSTR_ADDR_LEN]);
 // Split a string IP/CIDR into network address and IP count
 int split_cidr_range(const char * target, struct in_addr * ip_range, uint32_t * ip_count);
+// Load MAC addresses from text file
+int loadMAClist(const char * filename, char ** mac_list, struct hsearch_data *htab);
+void freeMAClist(char * mac_list, struct hsearch_data *htab);
 // Find MAC addresses for <target> range using <interface_index>, <mac>, and <ip>
-int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, char * target, int flags);
+int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, char * target, int flags, struct hsearch_data *htab);
 
 int main(int argc, char ** argv)
 {
-  int fd, c, flags = 0;
+  int c, fd = 0, list_count = 0, flags = 0;
+  struct timeval tv;
   char target[IPCIDRSTR_ADDR_LEN] = "";
   char interface_name[IFNAMSIZ] = "";
   int interface_index;
   unsigned char interface_mac[ETHER_ADDR_LEN];
   char interface_ip[IPSTR_ADDR_LEN];
+  char list_filename[PATH_MAX] = "";
   struct ifreq ifr;
+  struct hsearch_data mac_list_hash;
+  char * mac_list = NULL;
+
+  // Default socket timeout .950 seconds
+  tv.tv_sec = 0;
+  tv.tv_usec = 950000;
 
   // Read arguments
   opterr = 0;
 
-  while ((c = getopt (argc, argv, "hapvr:")) != -1)
+  while ((c = getopt (argc, argv, "hVapvir:l:t:")) != -1)
     switch (c)
     {
       case 'h':
         usage();
+        exit(0);
+        break;
+      case 'V':
+        printf("%s\n", VERSION);;
+        printf("%s\n\n", COPYRIGHT);
         exit(0);
         break;
       case 'a':
@@ -78,12 +109,28 @@ int main(int argc, char ** argv)
       case 'v':
         flags |= VERBOSE;
         break;
+      case 'i':
+        flags |= HASH_DENY;
+        break;
       case 'r':
         strncpy(target, optarg, IPCIDRSTR_ADDR_LEN);
+        break;
+      case 'l':
+        strncpy(list_filename, optarg, PATH_MAX);
+        break;
+      case 't': {
+        uint32_t n = atol(optarg);
+        tv.tv_sec = n/1000;
+        tv.tv_usec = (n%1000) * 1000;
+        }
         break;
       case '?':
         if (optopt == 'r')
           fprintf (stderr, "Option -r requires an IP range IP/CIDR.\n", optopt);
+        else if (optopt == 'l')
+          fprintf (stderr, "Option -l requires a filename.\n", optopt);
+        else if (optopt == 't')
+          fprintf (stderr, "Option -t requires a timeout in milliseconds.\n", optopt);
         else if (isprint(optopt))
           fprintf (stderr, "Unknown option `-%c'.\n", optopt);
         else
@@ -107,6 +154,14 @@ int main(int argc, char ** argv)
     exit(-1);
   }
 
+  if (strlen(list_filename) && (list_count = loadMAClist(list_filename, &mac_list, &mac_list_hash)) < 0)
+  {
+    fprintf(stderr, "There was a problem load MAC addresses from: %s\n", list_filename);
+    exit(-1);
+  }
+  if (list_count > 0)
+    flags |= HASH;
+
   /// START ///
   if (optind < argc) {
     strncpy(interface_name, argv[optind], IFNAMSIZ-1);
@@ -126,6 +181,12 @@ int main(int argc, char ** argv)
   }
   memcpy(ifr.ifr_name, interface_name, strlen(interface_name));
   ifr.ifr_name[strlen(interface_name)]=0;
+
+  // set timeout
+  if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
+    perror("setting socket timeout");
+    exit(-1);
+  }
 
   if (ioctl(fd, SIOCGIFINDEX, &ifr) == -1)
   {
@@ -159,17 +220,24 @@ int main(int argc, char ** argv)
     printf("Interface %s\n", interface_name);
     printf("Local IP %s\n", interface_ip);
     printf("Local MAC %02x:%02x:%02x:%02x:%02x:%02x\n", interface_mac[0], interface_mac[1], interface_mac[2], interface_mac[3], interface_mac[4], interface_mac[5]);
-    printf("Scan range %s\n\n", target);
+    printf("Scan range %s\n", target);
+    if (list_count > 0)
+      printf("Loaded %d MAC addresses from %s\n", list_count, list_filename);
+    printf("\n");
   }
 
-  getMACs(fd, interface_index, interface_mac, interface_ip, target, flags);
+  getMACs(fd, interface_index, interface_mac, interface_ip, target, flags, &mac_list_hash);
 
   close(fd);
+
+  // If a hash was created, destroy it
+  if (list_count > 0)
+    freeMAClist(mac_list, &mac_list_hash);
 
   return 0;
 }
 
-int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, char * target, int flags)
+int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, char * target, int flags, struct hsearch_data *htab)
 {
   const unsigned char ether_broadcast_addr[] = {0xff,0xff,0xff,0xff,0xff,0xff};
   struct sockaddr_ll addr = {0}, r_addr = {0};
@@ -183,8 +251,17 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
   ssize_t reply_len;
   char buffer[512];
   struct iovec r_iov[1];
-  int p;
-  uint32_t ip_count, i;
+  int p, show = 0;
+  ENTRY e, *ep;
+  uint32_t ip_count, i, found;
+  char macstr[MACSTR_ADDR_LEN];
+  char macstr_dest[MACSTR_ADDR_LEN];
+  char ipstr[IPSTR_ADDR_LEN];
+  char ipstr_dest[IPSTR_ADDR_LEN];
+
+  // Init
+  bzero(&message, sizeof(message));
+  bzero(&reply, sizeof(reply));
 
   // Prepare range
   split_cidr_range(target, &ip_range, &ip_count);
@@ -244,35 +321,58 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
     reply.msg_iovlen  = 1;
     reply.msg_control = 0;
     reply.msg_controllen = 0;
-  
-    // Wait for reply
-    if ((reply_len = recvmsg(fd, &reply, 0)) < 0) {
-      perror("receiving ARP request");
-      exit(-1);
-    }
-  
-    // Check it's an ARP reply and it's for us (unless ACCEPT_ANY was given)
-    rep = (struct ether_arp*)buffer;
-    if (ntohs(rep->arp_op) == ARPOP_REPLY 
-        && (*(uint32_t*)rep->arp_spa == *(uint32_t*)req.arp_tpa) || (flags & ACCEPT_ANY)) {
-      for(p=0; p < sizeof(in_addr_t); ++p) {
-        printf("%d%c", rep->arp_spa[p], (p+1 < sizeof(in_addr_t))?'.':'\t');
-      }
-      for(p=0; p < ETHER_ADDR_LEN; ++p) {
-        printf("%02x%c", rep->arp_sha[p], (p+1 < ETHER_ADDR_LEN)?':':'\0');
-      }
-      if (flags & VERBOSE) {
-        // Print ARP destination (usually our IP)
-        printf(" in reply to ");
-        for(p=0; p < sizeof(in_addr_t); ++p) {
-          printf("%d%c", rep->arp_tpa[p], (p+1 < sizeof(in_addr_t))?'.':'\t');
+
+    found = 0; 
+    do { 
+      // Wait for reply
+      if ((reply_len = recvmsg(fd, &reply, 0)) < 0) {
+        if (errno != EAGAIN) {
+          perror("receiving ARP request");
+          exit(-1);
         }
-        for(p=0; p < ETHER_ADDR_LEN; ++p) {
-          printf("%02x%c", rep->arp_tha[p], (p+1 < ETHER_ADDR_LEN)?':':'\0');
+        else {
+          break;
         }
       }
-      printf("\n");
+    
+      // Check it's an ARP reply and it's for us (unless ACCEPT_ANY was given)
+      rep = (struct ether_arp*)buffer;
+      macarray_to_str(rep->arp_sha, macstr);
+      iparray_to_str(rep->arp_spa, ipstr);
+  
+      // If there is a HASH, search within it
+      if (flags & HASH)
+      {
+        ep = NULL;
+        e.key = macstr;
+        hsearch_r(e, FIND, &ep, htab);
+        show = ((ep != NULL) && (flags & HASH_DENY)) || ((ep == NULL) && !(flags & HASH_DENY));
+      }
+
+      // Check if it's for us
+      found = (*(uint32_t*)rep->arp_spa == *(uint32_t*)req.arp_tpa);
+      
+      if (ntohs(rep->arp_op) == ARPOP_REPLY 
+          && (found || (flags & ACCEPT_ANY))
+          && (show || !(flags & HASH))
+      ) {
+        printf("%s\t", macstr);
+        printf("%s", ipstr);
+  
+        if (flags & VERBOSE) {
+          // Print ARP destination (usually our IP)
+          macarray_to_str(rep->arp_tha, macstr_dest);
+          iparray_to_str(rep->arp_tpa, ipstr_dest);
+          printf("\t->\t");
+          printf("%s\t", macstr_dest);
+          printf("%s", ipstr_dest);
+        }
+        printf("\n");
+      }
+
     }
+    while(!found);
+
   } //for
 
   return 0;
@@ -326,12 +426,83 @@ uint32_t inc_netorder(uint32_t value)
   return ntohl(htonl(value)+1);
 }
 
+void macarray_to_str(uint8_t array[ETHER_ADDR_LEN], char dest[MACSTR_ADDR_LEN])
+{
+  sprintf(dest, "%02x:%02x:%02x:%02x:%02x:%02x", array[0], array[1], array[2], array[3], array[4], array[5]);
+}
+void iparray_to_str(uint8_t array[IP_ADDR_LEN], char dest[IPSTR_ADDR_LEN])
+{
+  sprintf(dest, "%u.%u.%u.%u", array[0], array[1], array[2], array[3]);
+}
 void usage()
 {
-  printf("Usage: findmacs [-apvh] [-r IP/CIDR] interface\n\n");
+  printf("Usage: findmacs [-apvhV] [-t time] [-r IP/CIDR] [-l filename [-i]] interface\n\n");
   printf("  -r IP/CIDR      Scan this IP range. If not given <localIP>/24 is used\n");
+  printf("  -l filename     Load MAC addresses listed in <filename> and use them as allowed.\n");
+  printf("                  Only addresses found in network and not in list will be reported.\n");
+  printf("  -t time         Set wait-for-reply timeout to <time> milliseconds. Default is 950 ms\n");
+  printf("  -i              Report MAC addresses found in list (invert report)\n");
   printf("  -a              Accept ANY reply, even if it wasn't triggered by us\n");
   printf("  -p              Print IP address being queried\n");
   printf("  -v              Increase verbosity level\n");
-  printf("  -h              Print this help\n\n");
+  printf("  -h              Print this help\n");
+  printf("  -V              Print version and copyright information\n\n");
+}
+
+// MAC list //
+
+int loadMAClist(const char * filename, char ** mac_list, struct hsearch_data *htab)
+{
+  FILE * f = fopen(filename, "rt");
+  char line[LINE_LEN];
+  ENTRY e, *ep;
+  int ch;
+#if defined(__LP64__) || defined(_LP64)
+  uint64_t lines = 0;
+#else
+  uint32_t lines = 0;
+#endif
+
+  // Init
+  bzero(htab, sizeof(struct hsearch_data));
+
+  if (f == NULL)
+  {
+    perror("loading MAC list");
+    return -1;
+  }
+
+  // Count MACs in file
+  while (EOF != (ch=fgetc(f)))
+    if (ch=='\n')
+        ++lines;
+
+  rewind(f);
+
+  *mac_list = malloc(MACSTR_ADDR_LEN*lines);
+  hcreate_r(lines*2, htab);
+
+  lines = 1;
+  while(!feof(f)) {
+    if (fgets(line, LINE_LEN, f) != NULL)
+    {
+      line[strlen(line)-1] = 0;
+      char * mac = *mac_list + (MACSTR_ADDR_LEN*(lines-1));
+      strncpy(mac, line, MACSTR_ADDR_LEN);
+      e.key = mac;
+      e.data = (void*)lines;
+      hsearch_r(e, ENTER, &ep, htab);
+      ++lines;
+    }
+  }
+
+  fclose(f);
+
+  return lines-1;
+}
+
+void freeMAClist(char * mac_list, struct hsearch_data *htab)
+{
+  free(mac_list);
+  hdestroy_r(htab);
 }
