@@ -69,7 +69,7 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
 
 int main(int argc, char ** argv)
 {
-  int c, fd = 0, list_count = 0, flags = 0;
+  int c, fd = 0, list_count = 0, flags = 0, matches = 0;
   struct timeval tv;
   char target[IPCIDRSTR_ADDR_LEN] = "";
   char interface_name[IFNAMSIZ] = "";
@@ -93,12 +93,12 @@ int main(int argc, char ** argv)
     {
       case 'h':
         usage();
-        exit(0);
+        return 0;
         break;
       case 'V':
         printf("%s\n", VERSION);;
         printf("%s\n\n", COPYRIGHT);
-        exit(0);
+        return 0;
         break;
       case 'a':
         flags |= ACCEPT_ANY;
@@ -135,7 +135,7 @@ int main(int argc, char ** argv)
           fprintf (stderr, "Unknown option `-%c'.\n", optopt);
         else
           fprintf (stderr, "Unknown option character `\\x%x'.\n", optopt);
-        return 1;
+        return -1;
       default:
         abort ();
     }
@@ -144,20 +144,20 @@ int main(int argc, char ** argv)
   if (getuid() != 0)
   {
     fprintf(stderr, "You have to be root!\n");
-    exit(-1);
+    return -1;
   }
 
   // Check range
   if (strlen(target) && split_cidr_range(target, NULL, NULL))
   {
     fprintf(stderr, "You must enter IP/CIDR range. For example: 10.0.0.1/24\n");
-    exit(-1);
+    return -1;
   }
 
   if (strlen(list_filename) && (list_count = loadMAClist(list_filename, &mac_list, &mac_list_hash)) < 0)
   {
     fprintf(stderr, "There was a problem load MAC addresses from: %s\n", list_filename);
-    exit(-1);
+    return -1;
   }
   if (list_count > 0)
     flags |= HASH;
@@ -165,19 +165,19 @@ int main(int argc, char ** argv)
   /// START ///
   if (optind < argc) {
     strncpy(interface_name, argv[optind], IFNAMSIZ-1);
-    interface_name[IFNAMSIZ]=0; // We don't want a buffer overrun here
+    interface_name[IFNAMSIZ-1]=0; // We don't want a buffer overrun here
   }
 
   if (interface_name[0] == 0)
   {
     fprintf(stderr, "You must specify an interface\n");
-    exit(-1);
+    return -1;
   }
 
   fd = socket(AF_PACKET, SOCK_DGRAM, htons(ETH_P_ARP));
   if (fd < 0) {
     perror("creting socket");
-    exit(-1);
+    return -1;
   }
   memcpy(ifr.ifr_name, interface_name, strlen(interface_name));
   ifr.ifr_name[strlen(interface_name)]=0;
@@ -185,27 +185,27 @@ int main(int argc, char ** argv)
   // set timeout
   if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0) {
     perror("setting socket timeout");
-    exit(-1);
+    return -1;
   }
 
   if (ioctl(fd, SIOCGIFINDEX, &ifr) == -1)
   {
     perror("getting interface index");
-    exit(-1);
+    return -1;
   }
   interface_index = ifr.ifr_ifindex;
 
   if (ioctl(fd, SIOCGIFHWADDR, &ifr) == -1)
   {
     perror("getting interface MAC address");
-    exit(-1);
+    return -1;
   }
   memcpy(interface_mac, ifr.ifr_hwaddr.sa_data, ETHER_ADDR_LEN);
 
   if (ioctl(fd, SIOCGIFADDR, &ifr)==-1)
   {
     perror("getting interface IP address");
-    exit(-1);
+    return -1;
   }
   struct sockaddr_in* ipaddr = (struct sockaddr_in*)&ifr.ifr_addr;
   memcpy(interface_ip, inet_ntoa(ipaddr->sin_addr), IPSTR_ADDR_LEN);
@@ -226,7 +226,7 @@ int main(int argc, char ** argv)
     printf("\n");
   }
 
-  getMACs(fd, interface_index, interface_mac, interface_ip, target, flags, &mac_list_hash);
+  matches = getMACs(fd, interface_index, interface_mac, interface_ip, target, flags, &mac_list_hash);
 
   close(fd);
 
@@ -234,7 +234,7 @@ int main(int argc, char ** argv)
   if (list_count > 0)
     freeMAClist(mac_list, &mac_list_hash);
 
-  return 0;
+  return (matches > 0); // returns 1 if at least one MAC was printed
 }
 
 int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, char * target, int flags, struct hsearch_data *htab)
@@ -251,7 +251,7 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
   ssize_t reply_len;
   char buffer[512];
   struct iovec r_iov[1];
-  int p, show = 0;
+  int p, show = 0, matches = 0;
   ENTRY e, *ep;
   uint32_t ip_count, i, found;
   char macstr[MACSTR_ADDR_LEN];
@@ -284,7 +284,7 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
 
   if (!inet_aton(ip, &source_ip_addr)) {
     fprintf(stderr, "%s is not a valid IP address", ip);
-    return 2;
+    return -2;
   }
   memcpy(&req.arp_spa, &source_ip_addr.s_addr, sizeof(req.arp_spa));
   memcpy(req.arp_sha, mac, ETHER_ADDR_LEN);
@@ -309,7 +309,7 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
     
     if (sendmsg(fd, &message, 0) == -1) {
       perror("sending ARP request");
-      exit(-1);
+      return -3;
     }
   
   
@@ -328,7 +328,7 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
       if ((reply_len = recvmsg(fd, &reply, 0)) < 0) {
         if (errno != EAGAIN) {
           perror("receiving ARP request");
-          exit(-1);
+          return -4;
         }
         else {
           break;
@@ -358,6 +358,7 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
       ) {
         printf("%s\t", macstr);
         printf("%s", ipstr);
+	++matches;
   
         if (flags & VERBOSE) {
           // Print ARP destination (usually our IP)
@@ -375,7 +376,7 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
 
   } //for
 
-  return 0;
+  return matches;
 }
 
 int split_cidr_range(const char * target, struct in_addr * ip_range, uint32_t * ip_count)
