@@ -30,6 +30,11 @@ usage
       -h              Print this help
       -V              Print version and copyright information
  
+Return value
+============
+
+The script returns 1 if there was at least one MAC address printed in standard output. If not, it returns 0. Any other returned value means that there was an error during execution.
+
 Sample output
 =============
 
