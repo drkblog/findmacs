@@ -291,7 +291,6 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
 
   for(i=0; i<ip_count; ++i) {
 
-    ip_range.s_addr = inc_netorder(ip_range.s_addr); // Skip the first one (network address)
     memcpy(&req.arp_tpa, &ip_range.s_addr, sizeof(req.arp_tpa));
     if (flags & PRINT_REQ)
       printf("Sending ARP request for %s\n", inet_ntoa(ip_range));
@@ -373,6 +372,8 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
     }
     while(!found);
 
+    ip_range.s_addr = inc_netorder(ip_range.s_addr); // Next
+
   } //for
 
   return 0;
@@ -416,7 +417,7 @@ int split_cidr_range(const char * target, struct in_addr * ip_range, uint32_t * 
     memcpy(ip_range, &range, sizeof(range)); // Return value if pointer was given
 
   if (ip_count)
-    *ip_count = ~mask; // Return value if pointer was given
+    *ip_count = ~mask + 1; // Return value if pointer was given
 
   return 0;
 }
