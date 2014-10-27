@@ -17,7 +17,7 @@ This tool compiles under Linux
 usage
 =====
 
-    Usage: findmacs [-apvhV] [-t time] [-r IP/CIDR] [-l filename [-i]] interface
+    Usage: findmacs [-apxvhV] [-t time] [-r IP/CIDR] [-l filename [-i]] interface
     
       -r IP/CIDR      Scan this IP range. If not given <localIP>/24 is used
       -l filename     Load MAC addresses listed in <filename> and use them as allowed.
@@ -26,6 +26,7 @@ usage
       -i              Report MAC addresses found in list (invert report)
       -a              Accept ANY reply, even if it wasn't triggered by us
       -p              Print IP address being queried
+      -x              Don't check root privileges
       -v              Increase verbosity level
       -h              Print this help
       -V              Print version and copyright information
