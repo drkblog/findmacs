@@ -18,7 +18,7 @@
 */
 #define _GNU_SOURCE 
 
-#define VERSION "findMACs v1.05"
+#define VERSION "findMACs v1.06"
 #define COPYRIGHT "(C) 2014 Leandro Fernández - http://www.drk.com.ar/findmacs"
 
 #include <ctype.h>
@@ -51,6 +51,7 @@
 #define VERBOSE    0x04
 #define HASH       0x08
 #define HASH_DENY  0x10
+#define NON_ROOT   0x20
 
 // Print usage information
 void usage();
@@ -88,7 +89,7 @@ int main(int argc, char ** argv)
   // Read arguments
   opterr = 0;
 
-  while ((c = getopt (argc, argv, "hVapvir:l:t:")) != -1)
+  while ((c = getopt (argc, argv, "hVapvixr:l:t:")) != -1)
     switch (c)
     {
       case 'h':
@@ -111,6 +112,9 @@ int main(int argc, char ** argv)
         break;
       case 'i':
         flags |= HASH_DENY;
+        break;
+      case 'x':
+        flags |= NON_ROOT;
         break;
       case 'r':
         strncpy(target, optarg, IPCIDRSTR_ADDR_LEN);
@@ -141,7 +145,7 @@ int main(int argc, char ** argv)
     }
 
   // Check it's root
-  if (getuid() != 0)
+  if (getuid() != 0 && !(flags & NON_ROOT))
   {
     fprintf(stderr, "You have to be root!\n");
     return -1;
@@ -438,7 +442,7 @@ void iparray_to_str(uint8_t array[IP_ADDR_LEN], char dest[IPSTR_ADDR_LEN])
 }
 void usage()
 {
-  printf("Usage: findmacs [-apvhV] [-t time] [-r IP/CIDR] [-l filename [-i]] interface\n\n");
+  printf("Usage: findmacs [-apxvhV] [-t time] [-r IP/CIDR] [-l filename [-i]] interface\n\n");
   printf("  -r IP/CIDR      Scan this IP range. If not given <localIP>/24 is used\n");
   printf("  -l filename     Load MAC addresses listed in <filename> and use them as allowed.\n");
   printf("                  Only addresses found in network and not in list will be reported.\n");
@@ -446,6 +450,7 @@ void usage()
   printf("  -i              Report MAC addresses found in list (invert report)\n");
   printf("  -a              Accept ANY reply, even if it wasn't triggered by us\n");
   printf("  -p              Print IP address being queried\n");
+  printf("  -x              Don't check root privileges\n");
   printf("  -v              Increase verbosity level\n");
   printf("  -h              Print this help\n");
   printf("  -V              Print version and copyright information\n\n");
