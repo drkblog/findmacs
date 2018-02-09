@@ -130,11 +130,11 @@ int main(int argc, char ** argv)
         break;
       case '?':
         if (optopt == 'r')
-          fprintf (stderr, "Option -r requires an IP range IP/CIDR.\n", optopt);
+          fprintf (stderr, "Option -r requires an IP range IP/CIDR.\n");
         else if (optopt == 'l')
-          fprintf (stderr, "Option -l requires a filename.\n", optopt);
+          fprintf (stderr, "Option -l requires a filename.\n");
         else if (optopt == 't')
-          fprintf (stderr, "Option -t requires a timeout in milliseconds.\n", optopt);
+          fprintf (stderr, "Option -t requires a timeout in milliseconds.\n");
         else if (isprint(optopt))
           fprintf (stderr, "Unknown option `-%c'.\n", optopt);
         else
