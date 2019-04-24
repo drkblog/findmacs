@@ -16,7 +16,7 @@
 *  You should have received a copy of the GNU General Public License
 *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-#define _GNU_SOURCE 
+#define _GNU_SOURCE
 
 #define VERSION "findMACs v1.06"
 #define COPYRIGHT "(C) 2014 Leandro Fernández - http://www.drk.com.ar/findmacs"
@@ -66,7 +66,7 @@ int split_cidr_range(const char * target, struct in_addr * ip_range, uint32_t * 
 int loadMAClist(const char * filename, char ** mac_list, struct hsearch_data *htab);
 void freeMAClist(char * mac_list, struct hsearch_data *htab);
 // Find MAC addresses for <target> range using <interface_index>, <mac>, and <ip>
-int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, char * target, int flags, struct hsearch_data *htab);
+int getMACs(int fd, int interface_index, unsigned char mac[ETHER_ADDR_LEN], char * ip, char * target, int flags, struct hsearch_data *htab);
 
 int main(int argc, char ** argv)
 {
@@ -241,13 +241,12 @@ int main(int argc, char ** argv)
   return (matches > 0); // returns 1 if at least one MAC was printed
 }
 
-int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, char * target, int flags, struct hsearch_data *htab)
+int getMACs(int fd, int interface_index, unsigned char mac[ETHER_ADDR_LEN], char * ip, char * target, int flags, struct hsearch_data *htab)
 {
   const unsigned char ether_broadcast_addr[] = {0xff,0xff,0xff,0xff,0xff,0xff};
   struct sockaddr_ll addr = {0}, r_addr = {0};
   struct ether_arp req, *rep;
   struct in_addr source_ip_addr = {0};
-  struct in_addr target_ip_addr = {0};
   struct in_addr ip_range = {0};
   struct iovec iov[1];
   struct msghdr message;
@@ -255,7 +254,7 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
   ssize_t reply_len;
   char buffer[512];
   struct iovec r_iov[1];
-  int p, show = 0, matches = 0;
+  int show = 0, matches = 0;
   ENTRY e, *ep;
   uint32_t ip_count, i, found;
   char macstr[MACSTR_ADDR_LEN];
@@ -269,7 +268,7 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
 
   // Prepare range
   split_cidr_range(target, &ip_range, &ip_count);
-  
+
 
   // Construct target address
   addr.sll_family   = AF_PACKET;
@@ -298,24 +297,24 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
     memcpy(&req.arp_tpa, &ip_range.s_addr, sizeof(req.arp_tpa));
     if (flags & PRINT_REQ)
       printf("Sending ARP request for %s\n", inet_ntoa(ip_range));
-  
+
     // Send the packet
     iov[0].iov_base=&req;
     iov[0].iov_len=sizeof(req);
-    
+
     message.msg_name=&addr;
     message.msg_namelen=sizeof(addr);
     message.msg_iov=iov;
     message.msg_iovlen=1;
     message.msg_control=0;
     message.msg_controllen=0;
-    
+
     if (sendmsg(fd, &message, 0) == -1) {
       perror("sending ARP request");
       return -3;
     }
-  
-  
+
+
     r_iov[0].iov_base = buffer;
     r_iov[0].iov_len  = sizeof(req);
     reply.msg_name    = &r_addr;
@@ -325,8 +324,8 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
     reply.msg_control = 0;
     reply.msg_controllen = 0;
 
-    found = 0; 
-    do { 
+    found = 0;
+    do {
       // Wait for reply
       if ((reply_len = recvmsg(fd, &reply, 0)) < 0) {
         if (errno != EAGAIN) {
@@ -337,12 +336,12 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
           break;
         }
       }
-    
+
       // Check it's an ARP reply and it's for us (unless ACCEPT_ANY was given)
       rep = (struct ether_arp*)buffer;
       macarray_to_str(rep->arp_sha, macstr);
       iparray_to_str(rep->arp_spa, ipstr);
-  
+
       // If there is a HASH, search within it
       if (flags & HASH)
       {
@@ -354,15 +353,15 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
 
       // Check if it's for us
       found = (*(uint32_t*)rep->arp_spa == *(uint32_t*)req.arp_tpa);
-      
-      if (ntohs(rep->arp_op) == ARPOP_REPLY 
+
+      if (ntohs(rep->arp_op) == ARPOP_REPLY
           && (found || (flags & ACCEPT_ANY))
           && (show || !(flags & HASH))
       ) {
         printf("%s\t", macstr);
         printf("%s", ipstr);
 	++matches;
-  
+
         if (flags & VERBOSE) {
           // Print ARP destination (usually our IP)
           macarray_to_str(rep->arp_tha, macstr_dest);
@@ -409,7 +408,7 @@ int split_cidr_range(const char * target, struct in_addr * ip_range, uint32_t * 
   --cidr;
   *cidr = 0; // Cut tmp string
 
-  mask = mask << 32-count;
+  mask = mask << (32-count);
 
   if (inet_aton(tmp, &range) == 0)
     return 2; // Error
