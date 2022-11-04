@@ -348,7 +348,7 @@ int getMACs(int fd, int interface_index, char mac[ETHER_ADDR_LEN], char * ip, ch
       {
         ep = NULL;
         e.key = macstr;
-        hsearch_r(e, FIND, &ep, htab);
+        ep = hsearch(e, FIND);
         show = ((ep != NULL) && (flags & HASH_DENY)) || ((ep == NULL) && !(flags & HASH_DENY));
       }
 
@@ -487,7 +487,7 @@ int loadMAClist(const char * filename, char ** mac_list, struct hsearch_data *ht
   rewind(f);
 
   *mac_list = malloc(MACSTR_ADDR_LEN*lines);
-  hcreate_r(lines*2, htab);
+  hcreate(lines*2);
 
   lines = 1;
   while(!feof(f)) {
@@ -498,7 +498,7 @@ int loadMAClist(const char * filename, char ** mac_list, struct hsearch_data *ht
       strncpy(mac, line, MACSTR_ADDR_LEN);
       e.key = mac;
       e.data = (void*)lines;
-      hsearch_r(e, ENTER, &ep, htab);
+      hsearch(e, ENTER);
       ++lines;
     }
   }
@@ -511,5 +511,5 @@ int loadMAClist(const char * filename, char ** mac_list, struct hsearch_data *ht
 void freeMAClist(char * mac_list, struct hsearch_data *htab)
 {
   free(mac_list);
-  hdestroy_r(htab);
+  hdestroy();
 }
